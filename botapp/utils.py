@@ -1,3 +1,4 @@
+#botapp/utils.py
 import logging
 from telegram.ext import ContextTypes
 from botapp.models import BotUser, Participant
@@ -33,7 +34,7 @@ def calculate_winners_count():
     participants_count = Participant.objects.count()
     return 10 + max(0, (participants_count - 100) // 100)  # Изменено на 100
 
-async def choose_winner(context: ContextTypes.DEFAULT_TYPE):
+async def choose_winner(context):
     """
     Выбирает победителей из списка участников.
     """

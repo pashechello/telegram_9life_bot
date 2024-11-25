@@ -1,4 +1,5 @@
-from botapp.models import BotUser, ReferralCode, Participant
+# botapp/database.py
+from botapp.models import BotUser, ReferralCode, Participant, Referral
 from botapp.helpers import generate_referral_code
 import logging
 from django.db import transaction
@@ -6,7 +7,7 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 def save_user(user, referral_code_rel=None):
-    logger.debug(f"Сохранение пользователя: user_id={user.user_id}, referral_code_rel={referral_code_rel}")
+    logger.debug(f"Saving user: user_id={user.user_id}, referral_code_rel={referral_code_rel}")
     user_obj, created = BotUser.objects.get_or_create(
         user_id=user.user_id,
         defaults={
@@ -17,26 +18,27 @@ def save_user(user, referral_code_rel=None):
         }
     )
     if created:
-        referral_code_rel = generate_referral_code()
+        if not referral_code_rel:
+            referral_code_rel = generate_referral_code()
         attempts = 0
         max_attempts = 1000
         while ReferralCode.objects.filter(code=referral_code_rel).exists() and attempts < max_attempts:
             referral_code_rel = generate_referral_code()
             attempts += 1
         if attempts == max_attempts:
-            logger.error("Не удалось сгенерировать уникальный реферальный код.")
+            logger.error("Failed to generate a unique referral code.")
             return user_obj
-        logger.debug(f"Генерация ReferralCode: {referral_code_rel} для пользователя {user_obj}")
+        logger.debug(f"Generating ReferralCode: {referral_code_rel} for user {user_obj}")
         try:
             with transaction.atomic():
-                ReferralCode.objects.create(user=user_obj, code=referral_code_rel)
-                # Явно загружаем связанный объект ReferralCode
-                user_obj = BotUser.objects.select_related('referral_code_rel').get(user_id=user.user_id)
-                logger.debug(f"ReferralCode создан для пользователя {user_obj}")
+                referral_code_obj = ReferralCode.objects.create(user=user_obj, code=referral_code_rel)
+                user_obj.referral_code = referral_code_obj
+                user_obj.save()
+                logger.debug(f"ReferralCode {referral_code_obj.code} created for user {user_obj.user_id}")
         except Exception as e:
-            logger.error(f"Ошибка при создании ReferralCode: {e}")
+            logger.error(f"Error creating ReferralCode: {e}")
     else:
-        logger.debug(f"Пользователь обновлен: {user_obj}")
+        logger.debug(f"User updated: {user_obj}")
     return user_obj
 
 def add_participant(user_id, referral_code_rel=None):
@@ -87,3 +89,6 @@ def add_referral(referral_code_rel, referred_user_id):
     except BotUser.DoesNotExist:
         logger.error(f"User with user_id={referred_user_id} not found.")
         raise ValueError(f"User with user_id={referred_user_id} not found.")
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении реферала: {e}")
+        raise

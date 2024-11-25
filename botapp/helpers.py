@@ -1,3 +1,4 @@
+# botapp/helpers.py
 import random
 import string
 from botapp.models import ReferralCode
